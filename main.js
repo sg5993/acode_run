@@ -1,16 +1,3 @@
-// async function getUrl(uri) {
-//   let url;
-//   url = uri.replace(
-//     "content://com.android.externalstorage.documents/tree/primary%3A",
-//     ""
-//   )
-//   url = url.replace(
-//     '/storage/emulated/0', ''
-//   )
-//   url = url.split('::primary:').at(-1);
-//   return '/data/data/com.termux/files/home/storage/shared/' + url
-// }
-
 (function() {
   let appSettings = acode.require("settings");
   let Url = acode.require("Url");
@@ -39,9 +26,18 @@
         "content://com.android.externalstorage.documents/tree/primary"
       )
     ) {
-      path = path.split("::primary:")[1];
+      path = path.split("::")[1];
       let androidPath = "/sdcard/" + path;
       return androidPath;
+    } else if (path.startsWith("sftp://")) {
+      let sftpPath =
+      "/ais/home" +
+      path
+      .replace(/\.[^/.]+$/, "")
+      .split("/")
+      .join("/") +
+      "/";
+      return sftpPath;
     } else {
       return false;
     }
@@ -606,7 +602,44 @@
       } else if (handlers.length == 1) {
         handler = handlers[0];
       } else {
-        return;
+        // SFTP 파일 처리
+        if (file.uri.startsWith("file://") && file.uri.includes("ais/home")) {
+          // 1. SFTP 경로 추출
+          let sftpPath = "ais/home/" + file.uri.split("/").pop();
+
+          // 2. 파일 확장자에 따라 실행 명령어 생성
+          let fileExtension = sftpPath.split(".").pop();
+          let cmd;
+          switch (fileExtension) {
+            case "py":
+              cmd = `python "${sftpPath}"`;
+              break;
+            case "js":
+              cmd = `node "${sftpPath}"`;
+              break;
+            // 다른 확장자에 대한 명령어 추가
+            default:
+              cmd = `cat "${sftpPath}"`; // 기본 명령어: 파일 내용 출력
+          }
+
+          // 3. 실행
+          if (cmd) {
+            this.logger && this.logger.log("Running", cmd);
+            try {
+              this.$runBtn.replaceWith(this.$stopBtn);
+              this.execute(cmd);
+              this.$stopBtn.replaceWith(this.$runBtn);
+              this.logger && this.logger.log("Done", "exited with code=0");
+            } catch (err) {
+              this.logger &&
+              this.logger.error(`Failed to run "${file.name}" : ${String(err)}`);
+              throw err;
+            }
+          }
+          return; // SFTP 파일 처리 후 함수 종료
+        } else {
+          return; // 처리할 핸들러가 없는 경우
+        }
       }
 
       let cmd = await this.formatCommand(handler, file);
@@ -836,67 +869,6 @@
             info: "Display option to run projects.",
             checkbox: settings.projectsRunnable,
           }
-          // {
-          //   index: 1,
-          //   key: "cursorStyle",
-          //   text: "Cursor Style",
-          //   value: this.settings.cursorStyle,
-          //   info: "The style of the cursor.",
-          //   select: [
-          //     this.CURSOR_STYLE1,
-          //     this.CURSOR_STYLE2,
-          //     this.CURSOR_STYLE3,
-          //   ],
-          // },
-          // {
-          //   index: 2,
-          //   key: "fontSize",
-          //   text: "Font Size",
-          //   value: this.settings.fontSize,
-          //   info: "The font size used to render text.",
-          //   prompt: "Font Size",
-          //   promptType: "text",
-          //   promptOption: [{
-          //     match: /^[0-9]+$/,
-          //     required: true,
-          //   },
-          //   ],
-          // },
-          // {
-          //   index: 3,
-          //   key: "scrollBack",
-          //   text: "Scroll Back",
-          //   value: this.settings.scrollBack,
-          //   info: "The amount of scrollback in the terminal. Scrollback is the amount of rows that are retained when lines are scrolled beyond the initial viewport.",
-          //   prompt: "Scroll Back",
-          //   promptType: "number",
-          //   promptOption: [{
-          //     match: /^[0-9]+$/,
-          //     required: true,
-          //   },
-          //   ],
-          // },
-          // {
-          //   index: 4,
-          //   key: "scrollSensitivity",
-          //   text: "Scroll Sensitivity",
-          //   value: this.settings.scrollSensitivity,
-          //   info: "The scrolling speed multiplier used for adjusting normal scrolling speed.",
-          //   prompt: "Scroll Sensitivity",
-          //   promptType: "number",
-          //   promptOption: [{
-          //     match: /^[0-9]+$/,
-          //     required: true,
-          //   },
-          //   ],
-          // },
-          // {
-          //   index: 6,
-          //   key: "backgroundColor",
-          //   text: "Background Color",
-          //   value: this.settings.backgroundColor,
-          //   color: this.settings.backgroundColor,
-          // },
         ],
         cb: (key, value) => {
           if (key == "commands") {
